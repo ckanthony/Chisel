@@ -126,7 +126,7 @@ mod native {
             reason: e.to_string(),
         })?;
 
-        let existing = if patch.original().map_or(false, |s| s == "/dev/null") {
+        let existing = if patch.original() == Some("/dev/null") {
             String::new()
         } else {
             dir.read_to_string(&rel).map_err(|e| match e.kind() {
@@ -273,7 +273,7 @@ mod wasm_fallback {
             reason: e.to_string(),
         })?;
 
-        let new_content = if patch.original().map_or(false, |s| s == "/dev/null") {
+        let new_content = if patch.original() == Some("/dev/null") {
             apply("", &patch).map_err(|e| CoreError::PatchFailed {
                 reason: format!("apply failed: {e:?}"),
             })?

@@ -256,7 +256,7 @@ mod native {
 mod wasm_fallback {
     use super::*;
     use crate::security::validate_path;
-    use std::{fs, io::Write, path::PathBuf};
+    use std::{fs, io::Write};
     use tempfile::NamedTempFile;
 
     pub fn patch_apply(

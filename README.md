@@ -8,7 +8,7 @@
 
 🪛 Rust powered precision file operations for agents. Unix-native tools, minimal context footprint, strict path confinement: use directly with Chisel MCP or bring your own MCP, embeddable in any MCP server in Rust, Python, Nodejs.
 
-> **Agent skill included** — [`skills.md`](skills.md) is a ready-to-attach skill file that teaches agents how to use Chisel at maximum efficiency (tool selection, low-token read patterns, patch workflows, anti-patterns).
+> **Agent skill included** — [`skills/chisel/SKILL.md`](skills/chisel/SKILL.md) teaches agents how to use Chisel at maximum efficiency. Install with: `npx skills add YOUR_USERNAME/mcp-filesystem`
 
 > **Security hardened** — Verified properties across two layers: the MCP server (`chisel`) and the portable core library (`chisel-core`). See the [Security model](#security-model) section for the full breakdown.
 

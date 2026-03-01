@@ -1,7 +1,7 @@
 # Chisel
 
 [![CI](https://github.com/ckanthony/Chisel/actions/workflows/ci.yml/badge.svg)](https://github.com/ckanthony/Chisel/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/ckanthony/Chisel/branch/master/graph/badge.svg)](https://codecov.io/gh/ckanthony/Chisel)
+[![codecov](https://codecov.io/gh/ckanthony/Chisel/graph/badge.svg?token=L4XLugRCMs)](https://codecov.io/gh/ckanthony/Chisel)
 ![MCP server with tools](https://badge.mcpx.dev?type=server&features=tools,prompts, 'MCP server with tools')
 
 <img src="chisel.jpeg" alt="Chisel" width="300" />

@@ -10,17 +10,18 @@ pub async fn patch_apply(
     path: String,
     patch_text: String,
 ) -> Result<String, AppError> {
-    let result = core::patch_apply(&state.config.root, &path, &patch_text, state.config.read_only)
-        .map_err(AppError::from);
+    let result = core::patch_apply(
+        &state.config.root,
+        &path,
+        &patch_text,
+        state.config.read_only,
+    )
+    .map_err(AppError::from);
     audit("patch_apply", &path, &result);
     result
 }
 
-pub async fn append(
-    state: &AppState,
-    path: String,
-    content: String,
-) -> Result<String, AppError> {
+pub async fn append(state: &AppState, path: String, content: String) -> Result<String, AppError> {
     let result = core::append(&state.config.root, &path, &content, state.config.read_only)
         .map_err(AppError::from);
     audit("append", &path, &result);
@@ -50,8 +51,13 @@ pub async fn move_file(
     source: String,
     destination: String,
 ) -> Result<String, AppError> {
-    let result = core::move_file(&state.config.root, &source, &destination, state.config.read_only)
-        .map_err(AppError::from);
+    let result = core::move_file(
+        &state.config.root,
+        &source,
+        &destination,
+        state.config.read_only,
+    )
+    .map_err(AppError::from);
     // Log source→destination as the "path" for traceability.
     audit("move_file", &format!("{source} -> {destination}"), &result);
     result

@@ -1,5 +1,6 @@
 use std::{net::SocketAddr, num::NonZeroU32, sync::Arc};
 
+use axum::extract::Request;
 use axum::{
     Router,
     body::Body,
@@ -8,7 +9,6 @@ use axum::{
     middleware::{self, Next},
     response::{IntoResponse, Response},
 };
-use axum::extract::Request;
 use governor::{DefaultDirectRateLimiter, Quota, RateLimiter};
 use http_body_util::BodyExt;
 use rmcp::{
@@ -17,8 +17,7 @@ use rmcp::{
     model::{Implementation, ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router,
     transport::streamable_http_server::{
-        StreamableHttpService, StreamableHttpServerConfig,
-        session::local::LocalSessionManager,
+        StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
     },
 };
 use schemars::JsonSchema;
@@ -90,7 +89,9 @@ impl McpServer {
     /// Accepts patches wrapped in markdown code fences.
     /// Use `--- /dev/null` as source to create new files.
     /// Returns error in read-only mode.
-    #[tool(description = "Apply a unified diff patch to a file. Accepts markdown-fenced diffs. Use --- /dev/null to create new files. Returns error in read-only mode.")]
+    #[tool(
+        description = "Apply a unified diff patch to a file. Accepts markdown-fenced diffs. Use --- /dev/null to create new files. Returns error in read-only mode."
+    )]
     async fn patch_apply(
         &self,
         Parameters(p): Parameters<PatchApplyParams>,
@@ -101,7 +102,9 @@ impl McpServer {
     /// Append content to an existing file.
     /// Fails if the file does not exist.
     /// Returns error in read-only mode.
-    #[tool(description = "Append content to an existing file. Fails if file does not exist. Returns error in read-only mode.")]
+    #[tool(
+        description = "Append content to an existing file. Fails if file does not exist. Returns error in read-only mode."
+    )]
     async fn append(
         &self,
         Parameters(p): Parameters<PathContentParams>,
@@ -112,7 +115,9 @@ impl McpServer {
     /// Write content to a file, creating or overwriting it.
     /// Creates parent directories automatically.
     /// Returns error in read-only mode.
-    #[tool(description = "Write content to a file (create or overwrite). Creates parent dirs. Returns error in read-only mode.")]
+    #[tool(
+        description = "Write content to a file (create or overwrite). Creates parent dirs. Returns error in read-only mode."
+    )]
     async fn write_file(
         &self,
         Parameters(p): Parameters<PathContentParams>,
@@ -122,7 +127,9 @@ impl McpServer {
 
     /// Create a directory (and all missing parents).
     /// Returns error in read-only mode.
-    #[tool(description = "Create a directory (including parents). Returns error in read-only mode.")]
+    #[tool(
+        description = "Create a directory (including parents). Returns error in read-only mode."
+    )]
     async fn create_directory(
         &self,
         Parameters(p): Parameters<PathParam>,
@@ -132,18 +139,19 @@ impl McpServer {
 
     /// Move or rename a file within the root.
     /// Returns error in read-only mode.
-    #[tool(description = "Move or rename a file within the root directory. Returns error in read-only mode.")]
-    async fn move_file(
-        &self,
-        Parameters(p): Parameters<MoveParams>,
-    ) -> Result<String, AppError> {
+    #[tool(
+        description = "Move or rename a file within the root directory. Returns error in read-only mode."
+    )]
+    async fn move_file(&self, Parameters(p): Parameters<MoveParams>) -> Result<String, AppError> {
         filesystem::move_file(&self.state, p.source, p.destination).await
     }
 
     /// Execute a whitelisted shell command directly (no shell interpreter).
     /// Allowed: grep sed awk find cat head tail wc sort uniq cut tr diff file stat ls du rg.
     /// Path-like arguments are validated against the root directory.
-    #[tool(description = "Execute a whitelisted shell command (grep/cat/ls/find/rg/…). No shell interpreter — args are passed literally. Path args validated against root.")]
+    #[tool(
+        description = "Execute a whitelisted shell command (grep/cat/ls/find/rg/…). No shell interpreter — args are passed literally. Path args validated against root."
+    )]
     async fn shell_exec(
         &self,
         Parameters(p): Parameters<ShellExecParams>,
@@ -214,8 +222,7 @@ pub fn run_server_router(state: SharedState) -> Router {
     // governor uses a token-bucket; no thread serialisation.
     if rate_limit_rps > 0 {
         let quota = Quota::per_second(NonZeroU32::new(rate_limit_rps as u32).unwrap());
-        let limiter: Arc<DefaultDirectRateLimiter> =
-            Arc::new(RateLimiter::direct(quota));
+        let limiter: Arc<DefaultDirectRateLimiter> = Arc::new(RateLimiter::direct(quota));
         router.layer(middleware::from_fn(move |req: Request, next: Next| {
             let limiter = limiter.clone();
             async move {

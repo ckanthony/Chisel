@@ -141,8 +141,8 @@ mod tests {
 
     #[test]
     fn valid_config_is_ok() {
-        let cfg = Config::from_parts(PathBuf::from("/tmp"), 3000, Some("s3cr3t".into()), false)
-            .unwrap();
+        let cfg =
+            Config::from_parts(PathBuf::from("/tmp"), 3000, Some("s3cr3t".into()), false).unwrap();
         assert_eq!(cfg.secret, "s3cr3t");
         assert_eq!(cfg.port, 3000);
         assert_eq!(cfg.root, PathBuf::from("/tmp"));

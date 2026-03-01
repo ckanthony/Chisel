@@ -45,7 +45,9 @@ async fn write_file_then_shell_exec_cat_returns_content() {
         .await
         .unwrap();
 
-    let out = shell::shell_exec(&state, "cat".to_string(), vec![path_str]).await.unwrap();
+    let out = shell::shell_exec(&state, "cat".to_string(), vec![path_str])
+        .await
+        .unwrap();
     assert_eq!(out.exit_code, 0);
     assert_eq!(out.stdout, "hello integration\n");
 }
@@ -144,13 +146,9 @@ async fn shell_exec_etc_passwd_raises_outside_root_no_spawn() {
     let tmp = tempdir().unwrap();
     let state = make_state(tmp.path(), false, "secret");
 
-    let err = shell::shell_exec(
-        &state,
-        "cat".to_string(),
-        vec!["/etc/passwd".to_string()],
-    )
-    .await
-    .unwrap_err();
+    let err = shell::shell_exec(&state, "cat".to_string(), vec!["/etc/passwd".to_string()])
+        .await
+        .unwrap_err();
 
     assert!(
         matches!(err, chisel::error::AppError::OutsideRoot { .. }),

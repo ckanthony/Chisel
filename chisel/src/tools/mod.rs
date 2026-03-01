@@ -22,8 +22,7 @@ mod tests {
 
     fn state(read_only: bool) -> AppState {
         let cfg =
-            Config::from_parts(PathBuf::from("/tmp"), 3000, Some("tok".into()), read_only)
-                .unwrap();
+            Config::from_parts(PathBuf::from("/tmp"), 3000, Some("tok".into()), read_only).unwrap();
         AppState { config: cfg }
     }
 

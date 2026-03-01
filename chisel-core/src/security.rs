@@ -28,27 +28,37 @@ pub fn validate_path(root: &Path, input: &str) -> Result<PathBuf, CoreError> {
             loop {
                 let parent = cursor.parent().unwrap_or(Path::new("."));
                 if parent == cursor {
-                    return Err(CoreError::NotFound { path: input.to_owned() });
+                    return Err(CoreError::NotFound {
+                        path: input.to_owned(),
+                    });
                 }
-                tail.push(
-                    cursor
-                        .file_name()
-                        .ok_or_else(|| CoreError::NotFound { path: input.to_owned() })?,
-                );
+                tail.push(cursor.file_name().ok_or_else(|| CoreError::NotFound {
+                    path: input.to_owned(),
+                })?);
                 cursor = parent;
                 match std::fs::canonicalize(cursor) {
                     Ok(canon) => {
                         break tail.iter().rev().fold(canon, |acc, c| acc.join(c));
                     }
                     Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
-                    Err(_) => return Err(CoreError::NotFound { path: input.to_owned() }),
+                    Err(_) => {
+                        return Err(CoreError::NotFound {
+                            path: input.to_owned(),
+                        });
+                    }
                 }
             }
         }
         Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
-            return Err(CoreError::PermissionDenied { path: input.to_owned() });
+            return Err(CoreError::PermissionDenied {
+                path: input.to_owned(),
+            });
         }
-        Err(_) => return Err(CoreError::NotFound { path: input.to_owned() }),
+        Err(_) => {
+            return Err(CoreError::NotFound {
+                path: input.to_owned(),
+            });
+        }
     };
 
     if !resolved.starts_with(root) {
@@ -97,7 +107,10 @@ mod tests {
         let inner = root.join("inner");
         fs::create_dir_all(&inner).unwrap();
         fs::write("/tmp/traversal_target.txt", "").unwrap();
-        let traversal = inner.join("../../traversal_target.txt").to_string_lossy().into_owned();
+        let traversal = inner
+            .join("../../traversal_target.txt")
+            .to_string_lossy()
+            .into_owned();
 
         let err = validate_path(&root, &traversal).unwrap_err();
         assert!(matches!(err, CoreError::OutsideRoot { .. }));

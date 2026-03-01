@@ -30,7 +30,11 @@ impl IntoContents for ShellOutput {
 
 impl From<shell::ShellOutput> for ShellOutput {
     fn from(s: shell::ShellOutput) -> Self {
-        Self { exit_code: s.exit_code, stdout: s.stdout, stderr: s.stderr }
+        Self {
+            exit_code: s.exit_code,
+            stdout: s.stdout,
+            stderr: s.stderr,
+        }
     }
 }
 

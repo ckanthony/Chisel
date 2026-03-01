@@ -6,8 +6,8 @@ use std::path::Path;
 /// Commands permitted by `shell_exec`. `mkdir` and `mv` are intentionally
 /// absent — they must go through the validated Rust tools instead.
 const WHITELIST: &[&str] = &[
-    "grep", "sed", "awk", "find", "cat", "head", "tail", "wc", "sort", "uniq", "cut", "tr",
-    "diff", "file", "stat", "ls", "du", "rg",
+    "grep", "sed", "awk", "find", "cat", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff",
+    "file", "stat", "ls", "du", "rg",
 ];
 
 /// Structured output returned by `shell_exec`.
@@ -33,13 +33,11 @@ fn arg_looks_like_path(arg: &str) -> bool {
     arg.starts_with('/') || arg.contains("..")
 }
 
-pub fn shell_exec(
-    root: &Path,
-    command: &str,
-    args: &[&str],
-) -> Result<ShellOutput, CoreError> {
+pub fn shell_exec(root: &Path, command: &str, args: &[&str]) -> Result<ShellOutput, CoreError> {
     if !WHITELIST.contains(&command) {
-        return Err(CoreError::CommandNotAllowed { command: command.to_owned() });
+        return Err(CoreError::CommandNotAllowed {
+            command: command.to_owned(),
+        });
     }
 
     for arg in args {

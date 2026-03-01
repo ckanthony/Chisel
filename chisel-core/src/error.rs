@@ -22,7 +22,10 @@ impl fmt::Display for CoreError {
             CoreError::PermissionDenied { path } => write!(f, "permission denied: '{path}'"),
             CoreError::PatchFailed { reason } => write!(f, "patch failed: {reason}"),
             CoreError::ReadOnly => {
-                write!(f, "server is in read-only mode; write operations are disabled")
+                write!(
+                    f,
+                    "server is in read-only mode; write operations are disabled"
+                )
             }
             CoreError::CommandNotAllowed { command } => write!(
                 f,
@@ -38,10 +41,12 @@ impl std::error::Error for CoreError {}
 impl From<std::io::Error> for CoreError {
     fn from(e: std::io::Error) -> Self {
         match e.kind() {
-            std::io::ErrorKind::NotFound => CoreError::NotFound { path: e.to_string() },
-            std::io::ErrorKind::PermissionDenied => {
-                CoreError::PermissionDenied { path: e.to_string() }
-            }
+            std::io::ErrorKind::NotFound => CoreError::NotFound {
+                path: e.to_string(),
+            },
+            std::io::ErrorKind::PermissionDenied => CoreError::PermissionDenied {
+                path: e.to_string(),
+            },
             _ => CoreError::Other(e.to_string()),
         }
     }
@@ -64,7 +69,9 @@ mod tests {
 
     #[test]
     fn not_found_message_does_not_leak_listing() {
-        let e = CoreError::NotFound { path: "/data/secret.txt".into() };
+        let e = CoreError::NotFound {
+            path: "/data/secret.txt".into(),
+        };
         let msg = e.to_string();
         assert!(msg.contains("/data/secret.txt"));
         assert!(!msg.contains("ls ") && !msg.contains("contents"));
@@ -72,7 +79,9 @@ mod tests {
 
     #[test]
     fn command_not_allowed_lists_permitted_commands() {
-        let e = CoreError::CommandNotAllowed { command: "bash".into() };
+        let e = CoreError::CommandNotAllowed {
+            command: "bash".into(),
+        };
         let msg = e.to_string();
         assert!(msg.contains("bash"));
         assert!(msg.contains("grep"));

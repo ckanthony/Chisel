@@ -25,7 +25,10 @@ pub async fn auth_layer(
 ) -> Response {
     match extract_bearer_token(&req) {
         Some(token)
-            if token.as_bytes().ct_eq(state.config.secret.as_bytes()).into() =>
+            if token
+                .as_bytes()
+                .ct_eq(state.config.secret.as_bytes())
+                .into() =>
         {
             next.run(req).await
         }
@@ -46,8 +49,8 @@ mod tests {
     use crate::{config::Config, state::AppState};
 
     fn test_state(secret: &str) -> SharedState {
-        let cfg = Config::from_parts(PathBuf::from("/tmp"), 3000, Some(secret.into()), false)
-            .unwrap();
+        let cfg =
+            Config::from_parts(PathBuf::from("/tmp"), 3000, Some(secret.into()), false).unwrap();
         AppState::new(cfg)
     }
 

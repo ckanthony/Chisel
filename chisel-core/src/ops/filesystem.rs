@@ -24,7 +24,11 @@ pub fn strip_diff_fence(input: &str) -> &str {
 }
 
 fn check_writable(read_only: bool) -> Result<(), CoreError> {
-    if read_only { Err(CoreError::ReadOnly) } else { Ok(()) }
+    if read_only {
+        Err(CoreError::ReadOnly)
+    } else {
+        Ok(())
+    }
 }
 
 // ── Native implementation — cap-std (kernel-enforced confinement) ──────────
@@ -43,8 +47,8 @@ fn check_writable(read_only: bool) -> Result<(), CoreError> {
 #[cfg(not(target_family = "wasm"))]
 mod native {
     use super::*;
-    use std::{io::Write, path::PathBuf};
     use cap_std::{ambient_authority, fs::Dir};
+    use std::{io::Write, path::PathBuf};
 
     pub fn open_root(root: &Path) -> Result<Dir, CoreError> {
         Dir::open_ambient_dir(root, ambient_authority())
@@ -59,12 +63,12 @@ mod native {
     pub fn to_rel(root: &Path, input: &str) -> Result<PathBuf, CoreError> {
         let p = Path::new(input);
         if p.is_absolute() {
-            p.strip_prefix(root).map(|r| r.to_path_buf()).map_err(|_| {
-                CoreError::OutsideRoot {
+            p.strip_prefix(root)
+                .map(|r| r.to_path_buf())
+                .map_err(|_| CoreError::OutsideRoot {
                     path: input.to_owned(),
                     root: root.to_string_lossy().into_owned(),
-                }
-            })
+                })
         } else {
             Ok(p.to_path_buf())
         }
@@ -77,8 +81,7 @@ mod native {
         let filename = rel
             .file_name()
             .ok_or_else(|| CoreError::Other("path has no filename".into()))?;
-        let tmp_name =
-            format!(".{}.{}.tmp", filename.to_string_lossy(), std::process::id());
+        let tmp_name = format!(".{}.{}.tmp", filename.to_string_lossy(), std::process::id());
         let parent_rel = rel.parent().filter(|p| !p.as_os_str().is_empty());
 
         if let Some(parent) = parent_rel {
@@ -86,8 +89,9 @@ mod native {
                 .open_dir(parent)
                 .map_err(|e| CoreError::Other(e.to_string()))?;
             {
-                let mut f =
-                    pd.create(&tmp_name).map_err(|e| CoreError::Other(e.to_string()))?;
+                let mut f = pd
+                    .create(&tmp_name)
+                    .map_err(|e| CoreError::Other(e.to_string()))?;
                 f.write_all(content.as_bytes()).map_err(CoreError::from)?;
             }
             pd.rename(&tmp_name, &pd, filename)
@@ -118,17 +122,20 @@ mod native {
         let rel = to_rel(root, path)?;
 
         let raw = strip_diff_fence(patch_text);
-        let patch = Patch::from_str(raw)
-            .map_err(|e| CoreError::PatchFailed { reason: e.to_string() })?;
+        let patch = Patch::from_str(raw).map_err(|e| CoreError::PatchFailed {
+            reason: e.to_string(),
+        })?;
 
         let existing = if patch.original().map_or(false, |s| s == "/dev/null") {
             String::new()
         } else {
             dir.read_to_string(&rel).map_err(|e| match e.kind() {
-                io::ErrorKind::NotFound => CoreError::NotFound { path: path.to_owned() },
-                io::ErrorKind::PermissionDenied => {
-                    CoreError::PermissionDenied { path: path.to_owned() }
-                }
+                io::ErrorKind::NotFound => CoreError::NotFound {
+                    path: path.to_owned(),
+                },
+                io::ErrorKind::PermissionDenied => CoreError::PermissionDenied {
+                    path: path.to_owned(),
+                },
                 _ => CoreError::Other(e.to_string()),
             })?
         };
@@ -164,10 +171,12 @@ mod native {
         let mut f = dir
             .open_with(&rel, cap_std::fs::OpenOptions::new().append(true))
             .map_err(|e| match e.kind() {
-                io::ErrorKind::NotFound => CoreError::NotFound { path: path.to_owned() },
-                io::ErrorKind::PermissionDenied => {
-                    CoreError::PermissionDenied { path: path.to_owned() }
-                }
+                io::ErrorKind::NotFound => CoreError::NotFound {
+                    path: path.to_owned(),
+                },
+                io::ErrorKind::PermissionDenied => CoreError::PermissionDenied {
+                    path: path.to_owned(),
+                },
                 _ => CoreError::Other(e.to_string()),
             })?;
 
@@ -192,17 +201,14 @@ mod native {
             dir.create_dir_all(parent)
                 .map_err(|e| CoreError::Other(e.to_string()))?;
         }
-        dir.write(&rel, content.as_bytes()).map_err(CoreError::from)?;
+        dir.write(&rel, content.as_bytes())
+            .map_err(CoreError::from)?;
         Ok(format!("wrote {} bytes to {path}", content.len()))
     }
 
     // ── create_directory ─────────────────────────────────────────────────────
 
-    pub fn create_directory(
-        root: &Path,
-        path: &str,
-        read_only: bool,
-    ) -> Result<String, CoreError> {
+    pub fn create_directory(root: &Path, path: &str, read_only: bool) -> Result<String, CoreError> {
         check_writable(read_only)?;
         let dir = open_root(root)?;
         let rel = to_rel(root, path)?;
@@ -225,13 +231,16 @@ mod native {
         let src_rel = to_rel(root, source)?;
         let dst_rel = to_rel(root, destination)?;
 
-        dir.rename(&src_rel, &dir, &dst_rel).map_err(|e| match e.kind() {
-            io::ErrorKind::NotFound => CoreError::NotFound { path: source.to_owned() },
-            io::ErrorKind::PermissionDenied => {
-                CoreError::PermissionDenied { path: source.to_owned() }
-            }
-            _ => CoreError::Other(e.to_string()),
-        })?;
+        dir.rename(&src_rel, &dir, &dst_rel)
+            .map_err(|e| match e.kind() {
+                io::ErrorKind::NotFound => CoreError::NotFound {
+                    path: source.to_owned(),
+                },
+                io::ErrorKind::PermissionDenied => CoreError::PermissionDenied {
+                    path: source.to_owned(),
+                },
+                _ => CoreError::Other(e.to_string()),
+            })?;
         Ok(format!("moved {source} → {destination}"))
     }
 }
@@ -246,9 +255,9 @@ mod native {
 #[cfg(target_family = "wasm")]
 mod wasm_fallback {
     use super::*;
+    use crate::security::validate_path;
     use std::{fs, io::Write, path::PathBuf};
     use tempfile::NamedTempFile;
-    use crate::security::validate_path;
 
     pub fn patch_apply(
         root: &Path,
@@ -260,34 +269,31 @@ mod wasm_fallback {
         let resolved = validate_path(root, path)?;
 
         let raw = strip_diff_fence(patch_text);
-        let patch = Patch::from_str(raw)
-            .map_err(|e| CoreError::PatchFailed { reason: e.to_string() })?;
+        let patch = Patch::from_str(raw).map_err(|e| CoreError::PatchFailed {
+            reason: e.to_string(),
+        })?;
 
-        let new_content =
-            if patch.original().map_or(false, |s| s == "/dev/null") {
-                apply("", &patch)
-                    .map_err(|e| CoreError::PatchFailed {
-                        reason: format!("apply failed: {e:?}"),
-                    })?
-            } else {
-                let existing =
-                    fs::read_to_string(&resolved).map_err(|e| match e.kind() {
-                        io::ErrorKind::NotFound => {
-                            CoreError::NotFound { path: path.to_owned() }
-                        }
-                        io::ErrorKind::PermissionDenied => {
-                            CoreError::PermissionDenied { path: path.to_owned() }
-                        }
-                        _ => CoreError::Other(e.to_string()),
-                    })?;
-                apply(&existing, &patch).map_err(|e| CoreError::PatchFailed {
-                    reason: format!("hunk mismatch (file may have drifted): {e:?}"),
-                })?
-            };
+        let new_content = if patch.original().map_or(false, |s| s == "/dev/null") {
+            apply("", &patch).map_err(|e| CoreError::PatchFailed {
+                reason: format!("apply failed: {e:?}"),
+            })?
+        } else {
+            let existing = fs::read_to_string(&resolved).map_err(|e| match e.kind() {
+                io::ErrorKind::NotFound => CoreError::NotFound {
+                    path: path.to_owned(),
+                },
+                io::ErrorKind::PermissionDenied => CoreError::PermissionDenied {
+                    path: path.to_owned(),
+                },
+                _ => CoreError::Other(e.to_string()),
+            })?;
+            apply(&existing, &patch).map_err(|e| CoreError::PatchFailed {
+                reason: format!("hunk mismatch (file may have drifted): {e:?}"),
+            })?
+        };
 
         let parent = resolved.parent().unwrap_or(std::path::Path::new("."));
-        let mut tmp = NamedTempFile::new_in(parent)
-            .map_err(|e| CoreError::Other(e.to_string()))?;
+        let mut tmp = NamedTempFile::new_in(parent).map_err(|e| CoreError::Other(e.to_string()))?;
         tmp.write_all(new_content.as_bytes())
             .map_err(CoreError::from)?;
         tmp.persist(&resolved)
@@ -306,15 +312,22 @@ mod wasm_fallback {
         let resolved = validate_path(root, path)?;
 
         if !resolved.exists() {
-            return Err(CoreError::NotFound { path: path.to_owned() });
+            return Err(CoreError::NotFound {
+                path: path.to_owned(),
+            });
         }
 
         let mut file = fs::OpenOptions::new()
             .append(true)
             .open(&resolved)
             .map_err(CoreError::from)?;
-        file.write_all(content.as_bytes()).map_err(CoreError::from)?;
-        Ok(format!("appended {} bytes to {}", content.len(), resolved.display()))
+        file.write_all(content.as_bytes())
+            .map_err(CoreError::from)?;
+        Ok(format!(
+            "appended {} bytes to {}",
+            content.len(),
+            resolved.display()
+        ))
     }
 
     pub fn write_file(
@@ -330,14 +343,14 @@ mod wasm_fallback {
             fs::create_dir_all(parent).map_err(CoreError::from)?;
         }
         fs::write(&resolved, content.as_bytes()).map_err(CoreError::from)?;
-        Ok(format!("wrote {} bytes to {}", content.len(), resolved.display()))
+        Ok(format!(
+            "wrote {} bytes to {}",
+            content.len(),
+            resolved.display()
+        ))
     }
 
-    pub fn create_directory(
-        root: &Path,
-        path: &str,
-        read_only: bool,
-    ) -> Result<String, CoreError> {
+    pub fn create_directory(root: &Path, path: &str, read_only: bool) -> Result<String, CoreError> {
         check_writable(read_only)?;
         let resolved = validate_path(root, path)?;
         fs::create_dir_all(&resolved).map_err(CoreError::from)?;
@@ -564,13 +577,30 @@ mod tests {
         let p = path.to_str().unwrap();
 
         assert!(matches!(
-            patch_apply(&root, p, "--- /dev/null\n+++ f.txt\n@@ -0,0 +1 @@\n+x\n", true),
+            patch_apply(
+                &root,
+                p,
+                "--- /dev/null\n+++ f.txt\n@@ -0,0 +1 @@\n+x\n",
+                true
+            ),
             Err(CoreError::ReadOnly)
         ));
-        assert!(matches!(append(&root, p, "y", true), Err(CoreError::ReadOnly)));
-        assert!(matches!(write_file(&root, p, "z", true), Err(CoreError::ReadOnly)));
-        assert!(matches!(create_directory(&root, p, true), Err(CoreError::ReadOnly)));
-        assert!(matches!(move_file(&root, p, p, true), Err(CoreError::ReadOnly)));
+        assert!(matches!(
+            append(&root, p, "y", true),
+            Err(CoreError::ReadOnly)
+        ));
+        assert!(matches!(
+            write_file(&root, p, "z", true),
+            Err(CoreError::ReadOnly)
+        ));
+        assert!(matches!(
+            create_directory(&root, p, true),
+            Err(CoreError::ReadOnly)
+        ));
+        assert!(matches!(
+            move_file(&root, p, p, true),
+            Err(CoreError::ReadOnly)
+        ));
     }
 
     // ── symlink escape via cap-std (native only) ───────────────────────────

@@ -1,10 +1,10 @@
 # Chisel
 
-[![CI](https://github.com/anthonywritescode/mcp-filesystem/actions/workflows/ci.yml/badge.svg)](https://github.com/anthonywritescode/mcp-filesystem/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/anthonywritescode/mcp-filesystem/branch/master/graph/badge.svg)](https://codecov.io/gh/anthonywritescode/mcp-filesystem)
-![MCP server with tools](https://badge.mcpx.dev?type=server&features=tools 'MCP server with tools')
+[![CI](https://github.com/ckanthony/Chisel/workflows/ci.yml/badge.svg)](https://github.com/ckanthony/Chisel/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/ckanthony/Chisel/branch/master/graph/badge.svg)](https://codecov.io/gh/ckanthony/Chisel)
+![MCP server with tools](https://badge.mcpx.dev?type=server&features=tools,prompts, MCP server with tools')
 
-![Chisel](chisel.jpeg)
+<img src="chisel.jpeg" alt="Chisel" width="300" />
 
 🪛 Rust powered precision file operations for agents. Unix-native tools, minimal context footprint, strict path confinement: use directly with Chisel MCP or bring your own MCP, embeddable in any MCP server in Rust, Python, Nodejs.
 

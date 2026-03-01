@@ -26,7 +26,10 @@ impl fmt::Display for AppError {
             AppError::PermissionDenied { path } => write!(f, "permission denied: '{path}'"),
             AppError::PatchFailed { reason } => write!(f, "patch failed: {reason}"),
             AppError::ReadOnly => {
-                write!(f, "server is in read-only mode; write operations are disabled")
+                write!(
+                    f,
+                    "server is in read-only mode; write operations are disabled"
+                )
             }
             AppError::CommandNotAllowed { command } => write!(
                 f,
@@ -54,10 +57,12 @@ impl From<anyhow::Error> for AppError {
 impl From<std::io::Error> for AppError {
     fn from(e: std::io::Error) -> Self {
         match e.kind() {
-            std::io::ErrorKind::NotFound => AppError::NotFound { path: e.to_string() },
-            std::io::ErrorKind::PermissionDenied => {
-                AppError::PermissionDenied { path: e.to_string() }
-            }
+            std::io::ErrorKind::NotFound => AppError::NotFound {
+                path: e.to_string(),
+            },
+            std::io::ErrorKind::PermissionDenied => AppError::PermissionDenied {
+                path: e.to_string(),
+            },
             _ => AppError::Other(anyhow::anyhow!(e)),
         }
     }
@@ -94,7 +99,9 @@ mod tests {
 
     #[test]
     fn not_found_message_does_not_leak_listing() {
-        let e = AppError::NotFound { path: "/data/secret.txt".into() };
+        let e = AppError::NotFound {
+            path: "/data/secret.txt".into(),
+        };
         let msg = e.to_string();
         assert!(msg.contains("/data/secret.txt"));
         assert!(!msg.contains("ls ") && !msg.contains("contents"));
@@ -102,7 +109,9 @@ mod tests {
 
     #[test]
     fn command_not_allowed_lists_permitted_commands() {
-        let e = AppError::CommandNotAllowed { command: "bash".into() };
+        let e = AppError::CommandNotAllowed {
+            command: "bash".into(),
+        };
         let msg = e.to_string();
         assert!(msg.contains("bash"));
         assert!(msg.contains("grep"));
@@ -132,7 +141,10 @@ mod tests {
             AppError::NotFound { .. }
         ));
         assert!(matches!(
-            AppError::from(CoreError::OutsideRoot { path: "p".into(), root: "r".into() }),
+            AppError::from(CoreError::OutsideRoot {
+                path: "p".into(),
+                root: "r".into()
+            }),
             AppError::OutsideRoot { .. }
         ));
     }

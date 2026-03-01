@@ -40,9 +40,13 @@ fn state(root: &std::path::Path, read_only: bool) -> Arc<AppState> {
 }
 
 fn router_with_secret(root: &std::path::Path, secret: &str) -> axum::Router {
-    let cfg =
-        Config::from_parts(root.canonicalize().unwrap(), 3000, Some(secret.into()), false)
-            .unwrap();
+    let cfg = Config::from_parts(
+        root.canonicalize().unwrap(),
+        3000,
+        Some(secret.into()),
+        false,
+    )
+    .unwrap();
     run_server_router(AppState::new(cfg))
 }
 
@@ -161,13 +165,22 @@ async fn path_directory_traversal_is_blocked() {
     let st = state(&root, false);
 
     // /root/sub/../../etc/passwd — traverses out of root
-    let traversal =
-        root.join("sub").join("../../etc/passwd").to_str().unwrap().to_string();
+    let traversal = root
+        .join("sub")
+        .join("../../etc/passwd")
+        .to_str()
+        .unwrap()
+        .to_string();
 
     let res = filesystem::write_file(&st, traversal, "pwned".into()).await;
     assert!(res.is_err(), "directory traversal must be blocked, got Ok");
-    assert!(!std::path::Path::new("/etc/passwd").metadata().map(|m| m.len() == 6).unwrap_or(false),
-        "/etc/passwd must not have been truncated");
+    assert!(
+        !std::path::Path::new("/etc/passwd")
+            .metadata()
+            .map(|m| m.len() == 6)
+            .unwrap_or(false),
+        "/etc/passwd must not have been truncated"
+    );
 }
 
 /// An absolute path that does not start with root must be rejected immediately
@@ -177,8 +190,7 @@ async fn path_absolute_outside_root_returns_outside_root_error() {
     let tmp = tempdir().unwrap();
     let st = state(tmp.path(), false);
 
-    let res =
-        filesystem::write_file(&st, "/etc/pwned-by-chisel".into(), "data".into()).await;
+    let res = filesystem::write_file(&st, "/etc/pwned-by-chisel".into(), "data".into()).await;
     assert!(
         matches!(res, Err(AppError::OutsideRoot { .. })),
         "absolute path outside root must return OutsideRoot, got: {res:?}"
@@ -199,7 +211,12 @@ async fn path_symlink_in_component_is_blocked() {
     let st = state(&root, false);
 
     // Attempt: write root/escape/evil.txt  ≡  write /tmp/evil.txt
-    let path = root.join("escape").join("evil.txt").to_str().unwrap().to_string();
+    let path = root
+        .join("escape")
+        .join("evil.txt")
+        .to_str()
+        .unwrap()
+        .to_string();
     let res = filesystem::write_file(&st, path, "pwned".into()).await;
     assert!(
         res.is_err(),
@@ -275,7 +292,9 @@ async fn shell_dangerous_commands_blocked_before_spawn() {
     let tmp = tempdir().unwrap();
     let st = state(tmp.path(), false);
 
-    for cmd in &["bash", "sh", "zsh", "fish", "python3", "node", "curl", "wget", "rm", "chmod"] {
+    for cmd in &[
+        "bash", "sh", "zsh", "fish", "python3", "node", "curl", "wget", "rm", "chmod",
+    ] {
         let res = shell::shell_exec(&st, cmd.to_string(), vec![]).await;
         assert!(
             matches!(res, Err(AppError::CommandNotAllowed { .. })),
@@ -319,8 +338,7 @@ async fn shell_path_arg_outside_root_blocked_before_spawn() {
     let tmp = tempdir().unwrap();
     let st = state(tmp.path(), false);
 
-    let res =
-        shell::shell_exec(&st, "cat".to_string(), vec!["/etc/passwd".to_string()]).await;
+    let res = shell::shell_exec(&st, "cat".to_string(), vec!["/etc/passwd".to_string()]).await;
     assert!(
         matches!(res, Err(AppError::OutsideRoot { .. })),
         "path arg outside root must be blocked before spawn, got: {res:?}"
@@ -335,8 +353,12 @@ async fn shell_traversal_in_arg_blocked_before_spawn() {
     fs::create_dir(root.join("sub")).unwrap();
     let st = state(&root, false);
 
-    let traversal =
-        root.join("sub").join("../../etc/passwd").to_str().unwrap().to_string();
+    let traversal = root
+        .join("sub")
+        .join("../../etc/passwd")
+        .to_str()
+        .unwrap()
+        .to_string();
 
     let res = shell::shell_exec(&st, "cat".to_string(), vec![traversal]).await;
     assert!(
@@ -427,27 +449,41 @@ async fn readonly_all_write_tools_are_blocked() {
     assert!(
         matches!(
             filesystem::patch_apply(
-                &st, p.clone(),
+                &st,
+                p.clone(),
                 "--- /dev/null\n+++ f.txt\n@@ -0,0 +1 @@\n+x\n".into()
-            ).await,
+            )
+            .await,
             Err(AppError::ReadOnly)
         ),
         "patch_apply must return ReadOnly"
     );
     assert!(
-        matches!(filesystem::append(&st, p.clone(), "y".into()).await, Err(AppError::ReadOnly)),
+        matches!(
+            filesystem::append(&st, p.clone(), "y".into()).await,
+            Err(AppError::ReadOnly)
+        ),
         "append must return ReadOnly"
     );
     assert!(
-        matches!(filesystem::write_file(&st, p.clone(), "z".into()).await, Err(AppError::ReadOnly)),
+        matches!(
+            filesystem::write_file(&st, p.clone(), "z".into()).await,
+            Err(AppError::ReadOnly)
+        ),
         "write_file must return ReadOnly"
     );
     assert!(
-        matches!(filesystem::create_directory(&st, p.clone()).await, Err(AppError::ReadOnly)),
+        matches!(
+            filesystem::create_directory(&st, p.clone()).await,
+            Err(AppError::ReadOnly)
+        ),
         "create_directory must return ReadOnly"
     );
     assert!(
-        matches!(filesystem::move_file(&st, p.clone(), p.clone()).await, Err(AppError::ReadOnly)),
+        matches!(
+            filesystem::move_file(&st, p.clone(), p.clone()).await,
+            Err(AppError::ReadOnly)
+        ),
         "move_file must return ReadOnly"
     );
 }
@@ -461,10 +497,16 @@ async fn readonly_shell_exec_remains_available() {
     let file = root.join("readable.txt");
     fs::write(&file, "content").unwrap();
 
-    let res =
-        shell::shell_exec(&st, "cat".to_string(), vec![file.to_str().unwrap().to_string()])
-            .await;
-    assert!(res.is_ok(), "shell_exec must work in read-only mode, got: {res:?}");
+    let res = shell::shell_exec(
+        &st,
+        "cat".to_string(),
+        vec![file.to_str().unwrap().to_string()],
+    )
+    .await;
+    assert!(
+        res.is_ok(),
+        "shell_exec must work in read-only mode, got: {res:?}"
+    );
 }
 
 /// Files must not be modified by any write tool in read-only mode.
@@ -498,7 +540,10 @@ fn network_bind_address_is_loopback_only() {
 
     for port in [3000_u16, 8080, 9000] {
         let addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
-        assert!(addr.ip().is_loopback(), "port {port}: bind must be loopback");
+        assert!(
+            addr.ip().is_loopback(),
+            "port {port}: bind must be loopback"
+        );
         assert_ne!(
             addr.ip().to_string(),
             "0.0.0.0",

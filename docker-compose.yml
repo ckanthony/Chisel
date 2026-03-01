@@ -1,0 +1,14 @@
+services:
+  chisel:
+    build: .
+    image: chisel:latest
+    restart: unless-stopped
+    environment:
+      # Required: bearer token that the MCP client must send
+      MCP_APP_SECRET: "${MCP_APP_SECRET}"
+    volumes:
+      # Mount the directory you want to expose to the LLM
+      - ./data:/data
+    ports:
+      # Map host port 3000 → container port 3000 (change left side as needed)
+      - "127.0.0.1:3000:3000"

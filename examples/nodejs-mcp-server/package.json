@@ -1,0 +1,13 @@
+{
+  "name": "nodejs-mcp-server-example",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Example MCP server that delegates file ops to chisel",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8"
+  }
+}

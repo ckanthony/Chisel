@@ -1,0 +1,692 @@
+#!/usr/bin/env node
+/**
+ * Endpoint Test Script - Simulates browser behavior with cookie-based auth
+ * Tests all dashboard-be endpoints for accessibility
+ * 
+ * Usage: 
+ *   node script/test-endpoints.js       # Normal mode
+ *   node script/test-endpoints.js -v    # Verbose mode (logs responses as CSV)
+ */
+
+const BASE_URL = process.env.API_URL || 'https://tbv-dashboard-be-dev-694910840590.us-east1.run.app';
+const TEST_EMAIL = process.env.TEST_EMAIL || 'tester@test.com';
+const TEST_PASSWORD = process.env.TEST_PASSWORD || '111111';
+
+// Parse command line args
+const VERBOSE = process.argv.includes('-v') || process.argv.includes('--verbose');
+
+// Cookie jar to store tokens like a browser
+let cookies = {
+  accessToken: null,
+  refreshToken: null
+};
+
+// Results tracking
+const res = {
+  passed: [],
+  failed: [],
+  skipped: []
+};
+
+/**
+ * Parse Set-Cookie headers and store in cookie jar
+ */
+function parseCookies(response) {
+  let setCookieHeaders = [];
+  
+  if (typeof response.headers.getSetCookie === 'function') {
+    setCookieHeaders = response.headers.getSetCookie();
+  } else {
+    const raw = response.headers.get('set-cookie');
+    if (raw) {
+      setCookieHeaders = raw.split(/,(?=\s*(?:accessToken|refreshToken)=)/);
+    }
+  }
+  
+  for (const header of setCookieHeaders) {
+    const match = header.match(/^([^=]+)=([^;]*)/);
+    if (match) {
+      const [, name, value] = match;
+      if (name.trim() === 'accessToken' || name.trim() === 'refreshToken') {
+        const trimmedName = name.trim();
+        if (value && value.length > 0) {
+          cookies[trimmedName] = value;
+        } else {
+          cookies[trimmedName] = null;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Build cookie header string from cookie jar
+ */
+function buildCookieHeader() {
+  const parts = [];
+  if (cookies.accessToken) parts.push(`accessToken=${cookies.accessToken}`);
+  if (cookies.refreshToken) parts.push(`refreshToken=${cookies.refreshToken}`);
+  return parts.join('; ');
+}
+
+/**
+ * Make HTTP request simulating browser behavior
+ */
+async function request(method, path, body = null, options = {}) {
+  const url = `${BASE_URL}${path}`;
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) TBV-Endpoint-Tester/1.0',
+    ...options.headers
+  };
+  
+  const cookieHeader = buildCookieHeader();
+  if (cookieHeader) {
+    headers['Cookie'] = cookieHeader;
+  }
+  
+  const fetchOptions = {
+    method,
+    headers,
+    credentials: 'include'
+  };
+  
+  if (body && method !== 'GET') {
+    fetchOptions.body = JSON.stringify(body);
+  }
+  
+  const response = await fetch(url, fetchOptions);
+  parseCookies(response);
+  
+  let data = null;
+  const contentType = response.headers.get('content-type');
+  if (contentType?.includes('application/json')) {
+    try {
+      data = await response.json();
+    } catch (e) {
+      data = null;
+    }
+  }
+  
+  return { status: response.status, data, ok: response.ok };
+}
+
+/**
+ * Refresh access token using refresh token
+ */
+async function refreshToken() {
+  if (!cookies.refreshToken) {
+    console.log('  ⚠️  No refresh token available');
+    return false;
+  }
+  
+  console.log('  🔄 Refreshing access token...');
+  const res = await request('POST', '/api/auth/refresh');
+  
+  if (res.ok) {
+    console.log('  ✅ Token refreshed successfully');
+    return true;
+  }
+  
+  console.log('  ❌ Token refresh failed');
+  return false;
+}
+
+/**
+ * Make authenticated request with auto-refresh on 401
+ */
+async function authRequest(method, path, body = null, options = {}) {
+  let res = await request(method, path, body, options);
+  
+  if (res.status === 401 && cookies.refreshToken) {
+    const refreshed = await refreshToken();
+    if (refreshed) {
+      res = await request(method, path, body, options);
+    }
+  }
+  
+  return res;
+}
+
+/**
+ * Escape CSV value
+ */
+function csvEscape(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+/**
+ * Convert array of objects to CSV string
+ */
+function toCSV(items, maxItems = 10) {
+  if (!items || items.length === 0) return '     (no items)';
+  
+  const displayItems = items.slice(0, maxItems);
+  const allKeys = new Set();
+  
+  // Collect all keys from all items
+  for (const item of displayItems) {
+    if (typeof item === 'object' && item !== null) {
+      Object.keys(item).forEach(k => allKeys.add(k));
+    }
+  }
+  
+  const headers = Array.from(allKeys);
+  if (headers.length === 0) return '     (no displayable data)';
+  
+  const lines = [];
+  lines.push('     ' + headers.map(csvEscape).join(','));
+  
+  for (const item of displayItems) {
+    const values = headers.map(h => {
+      const v = item[h];
+      if (typeof v === 'object' && v !== null) {
+        return csvEscape(JSON.stringify(v));
+      }
+      return csvEscape(v);
+    });
+    lines.push('     ' + values.join(','));
+  }
+  
+  if (items.length > maxItems) {
+    lines.push(`     ... (${items.length - maxItems} more items)`);
+  }
+  
+  return lines.join('\n');
+}
+
+/**
+ * Log response data - verbose mode logs CSV
+ */
+function logResponse(data, options = {}) {
+  if (!data) {
+    if (VERBOSE) console.log('     Response: null');
+    return;
+  }
+  
+  // Extract pagination metadata
+  const meta = {};
+  if (data.pagination) {
+    meta.page = data.pagination.page || data.pagination.currentPage || 1;
+    meta.totalPages = data.pagination.totalPages || '?';
+    meta.total = data.pagination.total;
+    meta.limit = data.pagination.limit || data.pagination.pageSize;
+    meta.hasNext = data.pagination.hasNext;
+    meta.hasPrev = data.pagination.hasPrev;
+  } else if (data.total !== undefined) {
+    meta.total = data.total;
+  } else if (data.totalEvents !== undefined) {
+    meta.totalEvents = data.totalEvents;
+  }
+  
+  // Find the items array
+  const itemArrayKeys = ['profiles', 'events', 'folders', 'leadLists', 'companies', 'filters', 
+                         'users', 'sessions', 'templates', 'tags', 'quotas', 'contacts'];
+  let itemsKey = null;
+  let items = null;
+  
+  for (const key of itemArrayKeys) {
+    if (data[key] && Array.isArray(data[key])) {
+      itemsKey = key;
+      items = data[key];
+      break;
+    }
+  }
+  
+  // Check nested data.tags
+  if (!items && data.data?.tags && Array.isArray(data.data.tags)) {
+    itemsKey = 'tags';
+    items = data.data.tags;
+  }
+  
+  // Direct array response
+  if (!items && Array.isArray(data)) {
+    itemsKey = 'items';
+    items = data;
+  }
+  
+  // Build metrics string
+  const metrics = [];
+  if (meta.page) metrics.push(`Page: ${meta.page}/${meta.totalPages}`);
+  if (meta.total !== undefined) metrics.push(`Total: ${meta.total}`);
+  if (meta.totalEvents !== undefined) metrics.push(`Total Events: ${meta.totalEvents}`);
+  if (items) metrics.push(`${itemsKey}: ${items.length} items`);
+  
+  if (metrics.length > 0) {
+    console.log(`     📊 ${metrics.join(' | ')}`);
+  }
+  
+  // Verbose mode: log CSV
+  if (VERBOSE) {
+    // Log metadata as CSV
+    if (Object.keys(meta).length > 0) {
+      console.log('\n     --- Pagination Metadata ---');
+      console.log('     ' + Object.keys(meta).map(csvEscape).join(','));
+      console.log('     ' + Object.values(meta).map(csvEscape).join(','));
+    }
+    
+    // Log items as CSV
+    if (items && items.length > 0) {
+      console.log(`\n     --- ${itemsKey} (first page, max 10) ---`);
+      console.log(toCSV(items, 10));
+    }
+    
+    // For non-paged single object responses
+    if (!items && typeof data === 'object' && !Array.isArray(data) && Object.keys(meta).length === 0) {
+      // It's a single object response (like profile detail, stats, etc.)
+      const keys = Object.keys(data).filter(k => !itemArrayKeys.includes(k));
+      if (keys.length > 0 && keys.length <= 20) {
+        console.log('\n     --- Response Data ---');
+        console.log('     ' + keys.map(csvEscape).join(','));
+        console.log('     ' + keys.map(k => {
+          const v = data[k];
+          if (typeof v === 'object' && v !== null) {
+            return csvEscape(JSON.stringify(v));
+          }
+          return csvEscape(v);
+        }).join(','));
+      }
+    }
+  }
+}
+
+/**
+ * Test an endpoint and record result
+ */
+async function testEndpoint(name, method, path, body = null, expectedStatus = [200, 201], options = {}) {
+  const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+  
+  try {
+    const res = await authRequest(method, path, body);
+    const statusOk = expected.includes(res.status);
+    const isUnauthorized = res.status === 401 || res.status === 403;
+    
+    if (statusOk) {
+      console.log(`  ✅ ${name}`);
+      console.log(`     ${method} ${path} → ${res.status}`);
+      logResponse(res.data);
+      res.passed.push({ name, method, path, status: res.status });
+      return res;
+    } else if (isUnauthorized) {
+      console.log(`  ❌ ${name} - UNAUTHORIZED`);
+      console.log(`     ${method} ${path} → ${res.status}`);
+      if (res.data?.error) {
+        console.log(`     Error: ${res.data.error}`);
+      }
+      res.failed.push({ name, method, path, status: res.status, error: 'Unauthorized' });
+      return res;
+    } else {
+      console.log(`  ⚠️  ${name}`);
+      console.log(`     ${method} ${path} → ${res.status} (expected ${expected.join('/')})`);
+      if (res.data?.error) {
+        console.log(`     Error: ${res.data.error}`);
+      }
+      if (VERBOSE && res.data) {
+        console.log(`     Response: ${JSON.stringify(res.data)}`);
+      }
+      res.skipped.push({ name, method, path, status: res.status, note: `Expected ${expected.join('/')}` });
+      return res;
+    }
+  } catch (error) {
+    console.log(`  ❌ ${name} - ERROR`);
+    console.log(`     ${method} ${path}`);
+    console.log(`     ${error.message}`);
+    res.failed.push({ name, method, path, error: error.message });
+    return null;
+  }
+}
+
+// ============ Test Functions ============
+
+async function testAuth() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 AUTH ENDPOINTS');
+  console.log('═'.repeat(70));
+  
+  const loginRes = await request('POST', '/api/auth/login', {
+    email: TEST_EMAIL,
+    password: TEST_PASSWORD
+  });
+  
+  if (!loginRes.ok) {
+    console.log(`  ❌ Login failed: ${loginRes.status}`);
+    console.log(`     Response: ${JSON.stringify(loginRes.data)}`);
+    res.failed.push({ name: 'Login', method: 'POST', path: '/api/auth/login', status: loginRes.status });
+    return false;
+  }
+  
+  console.log(`  ✅ Login`);
+  console.log(`     POST /api/auth/login → ${loginRes.status}`);
+  console.log(`     📊 User: ${loginRes.data?.user?.email}`);
+  console.log(`     📊 Roles: ${loginRes.data?.user?.roles?.join(', ') || 'none'}`);
+  console.log(`     📊 Organization: ${loginRes.data?.user?.organizationName || 'N/A'}`);
+  
+  if (VERBOSE) {
+    const user = loginRes.data?.user;
+    if (user) {
+      console.log('\n     --- User Data ---');
+      const keys = Object.keys(user);
+      console.log('     ' + keys.map(csvEscape).join(','));
+      console.log('     ' + keys.map(k => csvEscape(Array.isArray(user[k]) ? user[k].join(';') : user[k])).join(','));
+    }
+  }
+  
+  res.passed.push({ name: 'Login', method: 'POST', path: '/api/auth/login', status: loginRes.status });
+  
+  await testEndpoint('Get Current User (/me)', 'GET', '/api/auth/me');
+  await testEndpoint('Verify Auth', 'GET', '/api/auth/verify');
+  await testEndpoint('Refresh Token', 'POST', '/api/auth/refresh');
+  
+  return true;
+}
+
+async function testProfiles() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 PROFILE ENDPOINTS');
+  console.log('═'.repeat(70));
+  
+  const anonymizedNames = ['Alex', 'Jordan', 'Taylor', 'Morgan', 'Casey', 'Riley', 'Quinn', 'Avery'];
+  const searchName = anonymizedNames[Math.floor(Math.random() * anonymizedNames.length)];
+  
+  console.log('\n--- Profile List ---');
+  
+  const listRes = await testEndpoint('Profile List (no filter)', 'POST', '/api/profiles/list', {
+    page: 1,
+    limit: 10
+  });
+  
+  await testEndpoint('Profile List (sorted by createdAt desc)', 'POST', '/api/profiles/list', {
+    page: 1,
+    limit: 10,
+    sortBy: 'createdAt',
+    sortOrder: 'desc'
+  });
+  
+  await testEndpoint(`Profile List (nameStartsWith: "${searchName}")`, 'POST', '/api/profiles/list', {
+    page: 1,
+    limit: 10,
+    nameStartsWith: searchName
+  });
+  
+  await testEndpoint('Profile List (emailStartsWith: "user")', 'POST', '/api/profiles/list', {
+    page: 1,
+    limit: 10,
+    emailStartsWith: 'user'
+  });
+  
+  await testEndpoint('Profile List (hasNotes: true)', 'POST', '/api/profiles/list', {
+    page: 1,
+    limit: 10,
+    hasNotes: true
+  });
+
+  console.log('\n--- Profile Count ---');
+  await testEndpoint('Profile Count (no filter)', 'POST', '/api/profiles/count', {});
+  await testEndpoint(`Profile Count (nameStartsWith: "${searchName}")`, 'POST', '/api/profiles/count', {
+    nameStartsWith: searchName
+  });
+
+  console.log('\n--- Profile Stats & Search ---');
+  await testEndpoint('Profile Stats', 'GET', '/api/profiles/stats');
+  await testEndpoint(`Profile Search (name: "${searchName}")`, 'GET', `/api/profiles/search?name=${searchName}&limit=10`);
+  await testEndpoint('Profile Search (email: "user")', 'GET', '/api/profiles/search?email=user&limit=10');
+
+  let profileId = listRes?.data?.profiles?.[0]?.id;
+  if (profileId) {
+    console.log('\n--- Profile Detail ---');
+    await testEndpoint('Profile Detail', 'GET', `/api/profiles/${profileId}`);
+    await testEndpoint('Profile Core', 'GET', `/api/profiles/${profileId}/core`);
+    await testEndpoint('Profile Events', 'GET', `/api/profiles/${profileId}/events`);
+    await testEndpoint('Profile Referrals', 'GET', `/api/profiles/${profileId}/referrals`);
+    await testEndpoint('Profile Q&A', 'GET', `/api/profiles/${profileId}/qa`);
+    await testEndpoint('Profile Timeline', 'GET', `/api/profiles/${profileId}/timeline`);
+    await testEndpoint('Profile Interests', 'GET', `/api/profiles/${profileId}/interests`);
+    await testEndpoint('Bulk Profiles', 'POST', '/api/profiles/bulk', { profileIds: [profileId] });
+  }
+}
+
+async function testEvents() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 EVENT ENDPOINTS');
+  console.log('═'.repeat(70));
+  
+  const listRes = await testEndpoint('Event List', 'GET', '/api/events?page=1&pageSize=10');
+  await testEndpoint('Accessible Events', 'GET', '/api/events/accessible');
+  await testEndpoint('Event Stats', 'GET', '/api/events/stats');
+  
+  if (listRes?.data?.events?.[0]?.id) {
+    await testEndpoint('Event Detail', 'GET', `/api/events/${listRes.data.events[0].id}`);
+  }
+}
+
+async function testFolders() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 FOLDER ENDPOINTS');
+  console.log('═'.repeat(70));
+  
+  await testEndpoint('Folder List', 'GET', '/api/folders');
+  
+  const testFolderName = `Test Folder ${Date.now()}`;
+  const createRes = await testEndpoint('Create Folder', 'POST', '/api/folders', {
+    name: testFolderName,
+    visibility: 'private'
+  }, [200, 201]);
+  
+  let folderId = createRes?.data?.folder?.id;
+  if (folderId) {
+    await testEndpoint('Get Folder', 'GET', `/api/folders/${folderId}`);
+    await testEndpoint('Update Folder', 'PUT', `/api/folders/${folderId}`, { name: `${testFolderName} Updated` });
+    await testEndpoint('Folder Profiles', 'GET', `/api/folders/${folderId}/profiles`);
+    await testEndpoint('Delete Folder', 'DELETE', `/api/folders/${folderId}`);
+  }
+}
+
+async function testLeads() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 LEAD ENDPOINTS');
+  console.log('═'.repeat(70));
+  
+  await testEndpoint('Lead List', 'GET', '/api/leads');
+  
+  const testLeadName = `Test Lead ${Date.now()}`;
+  const createRes = await testEndpoint('Create Lead List', 'POST', '/api/leads', { name: testLeadName }, [200, 201]);
+  
+  let leadId = createRes?.data?.leadList?.id;
+  if (leadId) {
+    await testEndpoint('Get Lead List', 'GET', `/api/leads/${leadId}`);
+    await testEndpoint('Delete Lead List', 'DELETE', `/api/leads/${leadId}`);
+  }
+}
+
+async function testTags() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 TAG ENDPOINTS');
+  console.log('═'.repeat(70));
+  
+  await testEndpoint('Tag List', 'GET', '/api/tags');
+  
+  const testTagName = `TestTag${Date.now()}`;
+  const createRes = await testEndpoint('Create Tag', 'POST', '/api/tags', { tagName: testTagName, isOrgVisible: false });
+  
+  let tagId = createRes?.data?.data?.tag?.id;
+  if (tagId) {
+    await testEndpoint('Update Tag', 'PUT', `/api/tags/${tagId}`, { tagName: `${testTagName}Updated` });
+    await testEndpoint('Delete Tag', 'DELETE', `/api/tags/${tagId}`);
+  }
+}
+
+async function testCustomFilters() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 CUSTOM FILTER ENDPOINTS');
+  console.log('═'.repeat(70));
+  
+  await testEndpoint('Custom Filter List', 'GET', '/api/custom-filters');
+  
+  const createRes = await testEndpoint('Create Custom Filter', 'POST', '/api/custom-filters', {
+    name: `Test Filter ${Date.now()}`,
+    visibility: 'private',
+    placement: 'all_profiles',
+    filter: { professions: [] }
+  }, [200, 201]);
+  
+  let filterId = createRes?.data?.filter?.id;
+  if (filterId) {
+    await testEndpoint('Update Custom Filter', 'PUT', `/api/custom-filters/${filterId}`, { name: `Updated ${Date.now()}` });
+    await testEndpoint('Delete Custom Filter', 'DELETE', `/api/custom-filters/${filterId}`);
+  }
+}
+
+async function testOrganizations() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 ORGANIZATION ENDPOINTS');
+  console.log('═'.repeat(70));
+  
+  await testEndpoint('Organization Users', 'GET', '/api/organizations/users');
+  await testEndpoint('Organization Quotas', 'GET', '/api/organizations/quotas');
+  await testEndpoint('Organization Options', 'GET', '/api/organizations/options');
+}
+
+async function testSessions() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 SESSION ENDPOINTS');
+  console.log('═'.repeat(70));
+  
+  await testEndpoint('Session List', 'GET', '/api/sessions');
+  await testEndpoint('Session Stats', 'GET', '/api/sessions/stats');
+}
+
+async function testCompanies() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 COMPANY ENDPOINTS');
+  console.log('═'.repeat(70));
+  
+  const listRes = await testEndpoint('Company List', 'POST', '/api/companies/list', { page: 1, limit: 10 });
+  await testEndpoint('Company List (name filter)', 'POST', '/api/companies/list', { page: 1, limit: 10, name: 'tech', minMemberCount: 2 });
+  await testEndpoint('Company Search', 'GET', '/api/companies/search?q=test&limit=10');
+  
+  if (listRes?.data?.companies?.[0]?.id) {
+    await testEndpoint('Company Detail', 'GET', `/api/companies/${listRes.data.companies[0].id}`);
+  }
+}
+
+async function testNotifications() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 NOTIFICATION ENDPOINTS');
+  console.log('═'.repeat(70));
+  
+  await testEndpoint('Notification Health', 'GET', '/api/notifications/health');
+  await testEndpoint('Campaign Notification Health', 'GET', '/api/notifications/campaign');
+}
+
+async function testCampaigns() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 CAMPAIGN ENDPOINTS');
+  console.log('═'.repeat(70));
+  
+  await testEndpoint('Campaign Templates', 'GET', '/api/campaigns/templates');
+}
+
+async function testLogout() {
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 LOGOUT');
+  console.log('═'.repeat(70));
+  
+  await testEndpoint('Logout', 'POST', '/api/auth/logout');
+  
+  const verifyRes = await request('GET', '/api/auth/me');
+  if (verifyRes.status === 401) {
+    console.log('  ✅ Confirmed logged out (401 on /me)');
+  }
+}
+
+// ============ Main ============
+
+async function main() {
+  console.log('╔' + '═'.repeat(68) + '╗');
+  console.log('║  TBV Dashboard Backend - Endpoint Test Suite' + ' '.repeat(22) + '║');
+  console.log('╠' + '═'.repeat(68) + '╣');
+  console.log(`║  Base URL: ${BASE_URL}`.padEnd(69) + '║');
+  console.log(`║  Test User: ${TEST_EMAIL}`.padEnd(69) + '║');
+  console.log(`║  Verbose: ${VERBOSE ? 'ON' : 'OFF'}`.padEnd(69) + '║');
+  console.log('╚' + '═'.repeat(68) + '╝');
+  
+  // Health check
+  console.log('\n' + '═'.repeat(70));
+  console.log('📦 HEALTH CHECK');
+  console.log('═'.repeat(70));
+  
+  try {
+    const healthRes = await request('GET', '/health');
+    if (healthRes.ok) {
+      console.log(`  ✅ Server is healthy`);
+      console.log(`     GET /health → ${healthRes.status}`);
+      logResponse(healthRes.data);
+    } else {
+      console.log(`  ❌ Server health check failed: ${healthRes.status}`);
+      process.exit(1);
+    }
+  } catch (error) {
+    console.log(`  ❌ Cannot connect to server: ${error.message}`);
+    process.exit(1);
+  }
+  
+  const loggedIn = await testAuth();
+  if (!loggedIn) {
+    console.log('\n❌ Login failed. Cannot continue tests.');
+    process.exit(1);
+  }
+  
+  await testProfiles();
+  await testEvents();
+  await testFolders();
+  await testLeads();
+  await testTags();
+  await testCustomFilters();
+  await testOrganizations();
+  await testSessions();
+  await testCompanies();
+  await testNotifications();
+  await testCampaigns();
+  await testLogout();
+  
+  // Summary
+  console.log('\n' + '╔' + '═'.repeat(68) + '╗');
+  console.log('║  TEST SUMMARY' + ' '.repeat(54) + '║');
+  console.log('╠' + '═'.repeat(68) + '╣');
+  console.log(`║  ✅ Passed:  ${res.passed.length}`.padEnd(69) + '║');
+  console.log(`║  ⚠️  Skipped: ${res.skipped.length}`.padEnd(69) + '║');
+  console.log(`║  ❌ Failed:  ${res.failed.length}`.padEnd(69) + '║');
+  console.log('╚' + '═'.repeat(68) + '╝');
+  
+  if (res.failed.length > 0) {
+    console.log('\n❌ FAILED TESTS:');
+    for (const f of res.failed) {
+      console.log(`   • ${f.name}`);
+      console.log(`     ${f.method} ${f.path}: ${f.error || `Status ${f.status}`}`);
+    }
+  }
+  
+  if (res.skipped.length > 0) {
+    console.log('\n⚠️  SKIPPED TESTS (non-critical):');
+    for (const s of res.skipped) {
+      console.log(`   • ${s.name}`);
+      console.log(`     ${s.method} ${s.path}: ${s.note || `Status ${s.status}`}`);
+    }
+  }
+  
+  if (res.failed.length > 0) {
+    process.exit(1);
+  }
+}
+
+main().catch(error => {
+  console.error('Fatal error:', error);
+  process.exit(1);
+});

@@ -1,0 +1,6 @@
+# Example Caddyfile — TLS is auto-managed by Caddy (Let's Encrypt).
+# Replace mcp.yourdomain.com with your actual domain.
+
+mcp.yourdomain.com {
+    reverse_proxy 127.0.0.1:3000
+}

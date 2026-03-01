@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "chisel",
+    "chisel-core",
+    "chisel-wasm",
+]
+resolver = "2"

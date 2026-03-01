@@ -1,0 +1,21 @@
+[package]
+name = "chisel-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.102"
+diffy = "0.4.2"
+
+# cap-std: kernel-enforced root confinement via openat + O_NOFOLLOW.
+# Not available on wasm32 (no ambient authority / process model).
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+cap-std = "3"
+
+# tempfile is only needed in the wasm fallback path (atomic rename via NamedTempFile).
+# Native builds use cap-std Dir::create + Dir::rename instead.
+[target.'cfg(target_family = "wasm")'.dependencies]
+tempfile = "3.26.0"
+
+[dev-dependencies]
+tempfile = "3.26.0"

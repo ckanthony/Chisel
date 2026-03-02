@@ -1,0 +1,75 @@
+{
+  "manifest_version": "0.3",
+  "name": "chisel",
+  "display_name": "Chisel",
+  "version": "0.1.6",
+  "description": "Rust-powered precision file operations. Minimal token footprint, strict path confinement.",
+  "long_description": "Chisel exposes Unix-native file and shell tools to Claude with a fixed path root — no accidental escapes, no full-file reads when a grep will do. Every edit goes through patch_apply (unified diff), every search through shell_exec (grep/rg/sed/find). Typical context cost is 50–160× lower than naive read_file + write_file patterns.",
+  "author": {
+    "name": "ckanthony",
+    "url": "https://github.com/ckanthony/Chisel"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ckanthony/Chisel"
+  },
+  "icon": "icon.png",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/chisel",
+    "mcp_config": {
+      "command": "${__dirname}/server/chisel",
+      "args": ["--stdio", "--root", "${user_config.root_directory}"],
+      "env": {
+        "CHISEL_READ_ONLY": "${user_config.read_only}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "patch_apply",
+      "description": "Apply a unified diff patch to a file atomically. Primary edit tool — sends only changed lines."
+    },
+    {
+      "name": "write_file",
+      "description": "Write (create or overwrite) a file. Creates parent directories automatically."
+    },
+    {
+      "name": "append",
+      "description": "Append content to an existing file."
+    },
+    {
+      "name": "create_directory",
+      "description": "Create a directory tree (mkdir -p semantics)."
+    },
+    {
+      "name": "move_file",
+      "description": "Move or rename a file within the root directory."
+    },
+    {
+      "name": "shell_exec",
+      "description": "Run a whitelisted command: grep sed awk find cat head tail wc sort uniq cut tr diff file stat ls du rg. No shell interpreter — args are passed literally."
+    }
+  ],
+  "user_config": {
+    "root_directory": {
+      "type": "directory",
+      "title": "Root Directory",
+      "description": "The folder Chisel is allowed to read and write. All file paths outside this directory are blocked at the kernel level.",
+      "required": true,
+      "default": "${HOME}/Documents"
+    },
+    "read_only": {
+      "type": "boolean",
+      "title": "Read-Only Mode",
+      "description": "When enabled, all write operations are blocked. shell_exec and reads still work.",
+      "required": false,
+      "default": false
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"]
+  },
+  "license": "MIT",
+  "keywords": ["filesystem", "files", "shell", "patch", "grep", "diff"]
+}

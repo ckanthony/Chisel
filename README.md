@@ -8,6 +8,10 @@
 
 🪛 Rust powered precision file operations for agents. Unix-native tools, minimal context footprint, strict path confinement: use directly with Chisel MCP or bring your own MCP, embeddable in any MCP server in Rust, Python, Nodejs.
 
+**Install** — download a pre-built [`.mcpb` bundle](https://github.com/modelcontextprotocol/mcpb) (one-click, no build step) or a raw binary from the [Releases page](https://github.com/ckanthony/Chisel/releases/latest) — see [Standalone usage](#standalone-usage) below.
+
+---
+
 > **Agent skill included** — [`skills/chisel/SKILL.md`](skills/chisel/SKILL.md) teaches agents how to use Chisel at maximum efficiency. Install with: `npx skills add ckanthony/Chisel`
 
 > **Security hardened** — Verified properties across two layers: the MCP server (`chisel`) and the portable core library (`chisel-core`). See the [Security model](#security-model) section for the full breakdown.
@@ -39,7 +43,7 @@
 Most MCP file tools hand an LLM a blank canvas: read anything, write anything, make any mistake. Chisel takes the opposite approach:
 
 - **Reduce context overhead** — every tool call is compact. File edits go through `patch_apply`: the model sends only a unified diff instead of rewriting an entire file, so large-file edits cost a fraction of the tokens
-- **Familiar command patterns** — `shell_exec` exposes the same Unix tools (`grep`, `sed`, `awk`, `find`, `cat`, `rg`, …) LLMs already know well from training data, so prompts stay short and outputs are predictable
+- **Familiar command patterns** — `shell_exec` exposes the same Unix tools (`grep`, `sed`, `awk`, `find`, `cat`, …) LLMs already know well from training data, so prompts stay short and outputs are predictable
 - **Precision over flexibility** — a fixed whitelist and strict path confinement mean the model cannot accidentally escape scope or run arbitrary commands
 - **Safety first** — bearer-token auth, `127.0.0.1`-only binding, symlink-aware root confinement, atomic writes, and a read-only mode are all on by default
 - **Reusable core** — `chisel-core` is a plain synchronous Rust library; any MCP server (Rust, Node.js via WASM, Python via WASM) can embed it without running a second process
@@ -218,18 +222,40 @@ Full integration guide → **[chisel-core/README.md](chisel-core/README.md)**
 
 ### Binary
 
-```bash
-# Build
-cargo build --release -p chisel
+**Option A — Download pre-built binary (recommended)**
 
-# Run (secret via env var, preferred)
-MCP_APP_SECRET=mysecret ./target/release/chisel --root /path/to/data
+Go to the [latest release](https://github.com/ckanthony/Chisel/releases/latest) and download the binary for your platform:
+
+| Platform | File |
+|---|---|
+| macOS Apple Silicon | `chisel-macos-arm64` |
+| macOS Intel | `chisel-macos-x86_64` |
+| Linux x86-64 | `chisel-linux-x86_64` |
+| Linux ARM64 | `chisel-linux-arm64` |
+
+```bash
+# Make executable and run
+chmod +x chisel-macos-arm64          # adjust filename for your platform
+MCP_APP_SECRET=mysecret ./chisel-macos-arm64 --root /path/to/data
+```
+
+**Option B — Build from source**
+
+```bash
+cargo build --release -p chisel
+```
+
+**Running**
+
+```bash
+# Secret via env var (preferred)
+MCP_APP_SECRET=mysecret ./chisel --root /path/to/data
 
 # Or via --secret flag (env var takes precedence if both set)
-./target/release/chisel --root /path/to/data --secret mysecret
+./chisel --root /path/to/data --secret mysecret
 
 # Read-only mode (shell_exec still works; writes are blocked)
-MCP_APP_SECRET=mysecret ./target/release/chisel --root /path/to/data --read-only
+MCP_APP_SECRET=mysecret ./chisel --root /path/to/data --read-only
 ```
 
 The server binds to `127.0.0.1:3000` by default. Use `--port` to change the port.

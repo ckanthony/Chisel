@@ -12,12 +12,15 @@ use axum::{
 use governor::{DefaultDirectRateLimiter, Quota, RateLimiter};
 use http_body_util::BodyExt;
 use rmcp::{
-    ServerHandler,
+    ServerHandler, ServiceExt,
     handler::server::{tool::ToolRouter, wrapper::Parameters},
     model::{Implementation, ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router,
-    transport::streamable_http_server::{
-        StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
+    transport::{
+        self,
+        streamable_http_server::{
+            StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
+        },
     },
 };
 use schemars::JsonSchema;
@@ -147,10 +150,10 @@ impl McpServer {
     }
 
     /// Execute a whitelisted shell command directly (no shell interpreter).
-    /// Allowed: grep sed awk find cat head tail wc sort uniq cut tr diff file stat ls du rg.
+    /// Allowed: grep sed awk find cat head tail wc sort uniq cut tr diff file stat ls du.
     /// Path-like arguments are validated against the root directory.
     #[tool(
-        description = "Execute a whitelisted shell command (grep/cat/ls/find/rg/…). No shell interpreter — args are passed literally. Path args validated against root."
+        description = "Execute a whitelisted shell command (grep/cat/ls/find/sed/awk/…). No shell interpreter — args are passed literally. Path args validated against root."
     )]
     async fn shell_exec(
         &self,
@@ -160,9 +163,26 @@ impl McpServer {
     }
 }
 
+fn os_detail() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "BSD sed (macOS)",
+        "linux" => "GNU sed (Linux)",
+        "windows" => "Windows",
+        other => other,
+    }
+}
+
+fn sed_i_note() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => r#"BSD sed requires an explicit backup suffix — use ["-i", "", "s/old/new/g", "/abs/path"] (the empty string is mandatory and is passed through correctly)"#,
+        _ => r#"GNU sed — use ["-i", "s/old/new/g", "/abs/path"]"#,
+    }
+}
+
 #[tool_handler]
 impl ServerHandler for McpServer {
     fn get_info(&self) -> ServerInfo {
+        let root = self.state.config.root.display().to_string();
         ServerInfo {
             protocol_version: Default::default(),
             capabilities: ServerCapabilities {
@@ -177,9 +197,18 @@ impl ServerHandler for McpServer {
                 icons: None,
                 website_url: None,
             },
-            instructions: Some(
-                "Filesystem and shell tool server. All paths are validated against the configured root directory.".to_owned(),
-            ),
+            instructions: Some(format!(
+                "Filesystem and shell tool server.\n\
+                Root directory: {root}\n\
+                Platform: {platform} ({os_detail})\n\
+                IMPORTANT: All path arguments must be absolute paths starting with \"{root}/\". \
+                Relative paths (\".\", \"./foo\", bare names) are rejected. \
+                Always use the full path, e.g. \"{root}/myfile.txt\" not \"myfile.txt\" or \".\".\n\
+                IMPORTANT: For sed -i on this platform: {sed_i_note}",
+                platform = std::env::consts::OS,
+                os_detail = os_detail(),
+                sed_i_note = sed_i_note(),
+            )),
         }
     }
 }
@@ -248,5 +277,14 @@ pub async fn run_server(state: SharedState) -> anyhow::Result<()> {
     eprintln!("mcp-fs listening on http://{addr}/mcp");
 
     axum::serve(listener, app).await?;
+    Ok(())
+}
+
+/// Run as an MCP stdio server — used when launched as a .mcpb Desktop Extension.
+/// Reads JSON-RPC from stdin, writes to stdout. No HTTP, no auth header required.
+pub async fn run_server_stdio(state: SharedState) -> anyhow::Result<()> {
+    let server = McpServer::new(state);
+    let running = server.serve(transport::stdio()).await?;
+    running.waiting().await?;
     Ok(())
 }

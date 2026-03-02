@@ -1,3 +1,5 @@
 /target
 notes
 tests/testing_target
+bundle/*.mcpb
+bundle/_stage/

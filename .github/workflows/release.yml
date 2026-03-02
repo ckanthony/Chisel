@@ -72,10 +72,61 @@ jobs:
           path: ${{ matrix.artifact }}
           retention-days: 1
 
+  bundle:
+    name: Bundle .mcpb (${{ matrix.artifact }})
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact: chisel-macos-arm64
+          - artifact: chisel-macos-x86_64
+          - artifact: chisel-linux-x86_64
+          - artifact: chisel-linux-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep '^version' chisel/Cargo.toml | head -1 | sed 's/.*= *"//' | sed 's/".*//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download binary (${{ matrix.artifact }})
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts
+
+      - name: Pack .mcpb
+        run: |
+          ARTIFACT="${{ matrix.artifact }}"
+          STAGE="bundle/_stage"
+          # No version prefix — keeps the /releases/latest/download/ URL stable.
+          MCPB_NAME="${ARTIFACT}.mcpb"
+
+          mkdir -p "$STAGE/server"
+          cp bundle/manifest.json "$STAGE/manifest.json"
+          [ -f chisel.jpeg ] && cp chisel.jpeg "$STAGE/icon.png"
+          cp "artifacts/$ARTIFACT" "$STAGE/server/chisel"
+          chmod +x "$STAGE/server/chisel"
+
+          (cd "$STAGE" && zip -r "$GITHUB_WORKSPACE/bundle/${MCPB_NAME}" . -x "*.DS_Store")
+          rm -rf "$STAGE"
+
+      - name: Upload .mcpb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-mcpb
+          path: bundle/${{ matrix.artifact }}.mcpb
+          retention-days: 7
+
   release:
     name: Publish release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, bundle]
     permissions:
       contents: write
 

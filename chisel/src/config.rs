@@ -1,6 +1,15 @@
 use clap::Parser;
 use std::path::PathBuf;
 
+/// How the MCP server communicates with the client.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Transport {
+    /// Streamable HTTP on 127.0.0.1:<port> with Bearer-token auth (default).
+    Http,
+    /// stdio — used when launched as a .mcpb Desktop Extension; no auth needed.
+    Stdio,
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub root: PathBuf,
@@ -11,6 +20,7 @@ pub struct Config {
     pub rate_limit_rps: u64,
     /// Maximum HTTP request body size in bytes.
     pub body_limit_bytes: usize,
+    pub transport: Transport,
 }
 
 #[derive(Parser, Debug)]
@@ -24,7 +34,7 @@ struct Cli {
     #[arg(long, default_value_t = 3000)]
     port: u16,
 
-    /// Bearer token secret (overridden by MCP_APP_SECRET)
+    /// Bearer token secret (overridden by MCP_APP_SECRET). Not required in --stdio mode.
     #[arg(long)]
     secret: Option<String>,
 
@@ -39,6 +49,10 @@ struct Cli {
     /// Maximum HTTP request body size in bytes (default: 4 MiB)
     #[arg(long, default_value_t = 4 * 1024 * 1024)]
     body_limit: usize,
+
+    /// Use stdio transport (for .mcpb / Desktop Extension installs). Disables HTTP and auth.
+    #[arg(long)]
+    stdio: bool,
 }
 
 /// Returns the effective secret, preferring `env` over `cli`.
@@ -49,20 +63,39 @@ pub fn resolve_secret(cli: Option<String>, env: Option<String>) -> Option<String
 }
 
 impl Config {
-    /// Parse CLI args, apply env-var override, fail-fast if secret is missing.
+    /// Parse CLI args, apply env-var override, fail-fast if secret is missing (HTTP mode only).
     pub fn load() -> Result<Self, String> {
         let cli = Cli::parse();
         let env_secret = std::env::var("MCP_APP_SECRET").ok();
-        let secret = resolve_secret(cli.secret, env_secret)
-            .ok_or("secret is required: set --secret or MCP_APP_SECRET")?;
+        let transport = if cli.stdio {
+            Transport::Stdio
+        } else {
+            Transport::Http
+        };
+
+        // Secret is required for HTTP transport (auth layer); unused in stdio mode.
+        let secret = match transport {
+            Transport::Http => resolve_secret(cli.secret, env_secret)
+                .ok_or("secret is required: set --secret or MCP_APP_SECRET")?,
+            Transport::Stdio => resolve_secret(cli.secret, env_secret)
+                .unwrap_or_else(|| "stdio-no-auth".to_owned()),
+        };
+
+        // CHISEL_READ_ONLY=true allows the .mcpb manifest to pass the read-only
+        // preference as an env var without needing conditional CLI arg support.
+        let read_only = cli.read_only
+            || std::env::var("CHISEL_READ_ONLY")
+                .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+                .unwrap_or(false);
 
         Ok(Config {
             root: cli.root,
             port: cli.port,
             secret,
-            read_only: cli.read_only,
+            read_only,
             rate_limit_rps: cli.rate_limit,
             body_limit_bytes: cli.body_limit,
+            transport,
         })
     }
 
@@ -84,6 +117,7 @@ impl Config {
             read_only,
             rate_limit_rps: 100,
             body_limit_bytes: 4 * 1024 * 1024,
+            transport: Transport::Http,
         })
     }
 }

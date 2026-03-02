@@ -3,3 +3,4 @@ notes
 tests/testing_target
 bundle/*.mcpb
 bundle/_stage/
+.DS_Store

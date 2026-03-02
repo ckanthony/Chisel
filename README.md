@@ -8,6 +8,8 @@
 
 🪛 Rust powered precision file operations for agents. Unix-native tools, minimal context footprint, strict path confinement: use directly with Chisel MCP or bring your own MCP, embeddable in any MCP server in Rust, Python, Nodejs.
 
+https://github.com/user-attachments/assets/af84f1af-db47-4e42-808b-00861504cd34
+
 **Install** — download a pre-built [`.mcpb` bundle](https://github.com/modelcontextprotocol/mcpb) (one-click, no build step) or a raw binary from the [Releases page](https://github.com/ckanthony/Chisel/releases/latest) — see [Standalone usage](#standalone-usage) below.
 
 ---

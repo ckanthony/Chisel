@@ -690,3 +690,8 @@ A potential extension is a thin sync layer that hydrates S3 or R2 objects into a
 The agent would interact exclusively with Chisel — path confinement, atomic patching, and shell tooling all behave identically. S3/R2 would serve purely as the persistence layer, transparent to the model.
 
 Open problems before this is viable: concurrent writes to the same object need optimistic locking (ETag-based check-and-swap on flush), and a native `cap-std` equivalent does not exist for object storage, so confinement must be enforced at the scratch directory level rather than the storage layer. The core `shell_exec` whitelist also assumes a Unix filesystem and would require the object to be fully materialized locally before any command runs.
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/ckanthony-chisel).
+
